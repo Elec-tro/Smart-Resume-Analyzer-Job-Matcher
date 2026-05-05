@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HireSense – AI Resume Analyzer</title>
+    <meta name="description" content="Optimize your resume with HireSense. AI-powered skill extraction, ATS scoring, and job matching.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Components
+        const Icon = ({ name, size = 24, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        const Navbar = ({ user, onLogout, onAuthClick }) => (
+            <nav>
+                <div className="logo">
+                    <Icon name="brain-circuit" size={32} />
+                    HireSense
+                </div>
+                <div className="nav-links">
+                    {user ? (
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <span>{user.email}</span>
+                            <button className="btn btn-outline" onClick={onLogout}>Logout</button>
+                        </div>
+                    ) : (
+                        <button className="btn btn-primary" onClick={onAuthClick}>Login / Signup</button>
+                    )}
+                </div>
+            </nav>
+        );
+
+        const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            if (!isOpen) return null;
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                const endpoint = isLogin ? '/login' : '/signup';
+                try {
+                    const res = await axios.post(`http://localhost:8000${endpoint}`, { email, password });
+                    if (isLogin) {
+                        localStorage.setItem('token', res.data.access_token);
+                        localStorage.setItem('user', JSON.stringify({ email, id: res.data.user_id }));
+                        onAuthSuccess(res.data);
+                    } else {
+                        setIsLogin(true);
+                        alert('Signup successful! Please login.');
+                    }
+                } catch (err) {
+                    setError(err.response?.data?.detail || 'Something went wrong');
+                }
+            };
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="auth-card glass fade-in" onClick={e => e.stopPropagation()}>
+                        <h2>{isLogin ? 'Welcome Back' : 'Join HireSense'}</h2>
+                        <form onSubmit={handleSubmit}>
+                            <div className="form-group">
+                                <label>Email Address</label>
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                            </div>
+                            <div className="form-group">
+                                <label>Password</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                            </div>
+                            {error && <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</p>}
+                            <button className="btn btn-primary" style={{ width: '100%' }} type="submit">
+                                {isLogin ? 'Login' : 'Create Account'}
+                            </button>
+                        </form>
+                        <p style={{ marginTop: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            {isLogin ? "Don't have an account? " : "Already have an account? "}
+                            <span 
+                                style={{ color: 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}
+                                onClick={() => setIsLogin(!isLogin)}
+                            >
+                                {isLogin ? 'Sign Up' : 'Login'}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        const UploadSection = ({ onUploadStart, onUploadSuccess, onUploadError }) => {
+            const fileInputRef = useRef();
+
+            const handleFileChange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                onUploadStart();
+                try {
+                    const token = localStorage.getItem('token');
+                    const res = await axios.post('http://localhost:8000/analyze', formData, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    onUploadSuccess(res.data);
+                } catch (err) {
+                    onUploadError(err.response?.data?.detail || 'Upload failed');
+                }
+            };
+
+            return (
+                <div className="hero fade-in">
+                    <h1>Optimize Your Career with <span style={{ color: 'var(--primary)' }}>AI-Powered</span> Resume Analysis</h1>
+                    <p>Get instant ATS scores, detect missing skills, and match your profile against top job roles in seconds.</p>
+                    
+                    <div className="upload-card glass" onClick={() => fileInputRef.current.click()}>
+                        <Icon name="upload-cloud" size={48} className="upload-icon" />
+                        <h3>Upload Resume</h3>
+                        <p>PDF or DOCX (Max 5MB)</p>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            style={{ display: 'none' }} 
+                            accept=".pdf,.docx" 
+                            onChange={handleFileChange}
+                        />
+                    </div>
+                </div>
+            );
+        };
+
+        const Dashboard = ({ results, history, onBack }) => {
+            const getScoreColor = (score) => {
+                if (score > 80) return '#22c55e';
+                if (score > 50) return '#eab308';
+                return '#ef4444';
+            };
+
+            return (
+                <div className="dashboard fade-in">
+                    <button className="btn btn-outline" style={{ marginBottom: '2rem' }} onClick={onBack}>
+                        <Icon name="arrow-left" size={18} /> Back to Upload
+                    </button>
+
+                    <div className="stats-grid">
+                        <div className="stat-card glass">
+                            <div className="score-circle">
+                                {results.ats_score}%
+                            </div>
+                            <h3 style={{ textAlign: 'center' }}>ATS Score</h3>
+                        </div>
+                        <div className="stat-card glass" style={{ gridColumn: 'span 2' }}>
+                            <h3>Skills Detected</h3>
+                            <div className="skill-tags" style={{ marginTop: '1rem' }}>
+                                {results.skills_detected.map(skill => (
+                                    <span key={skill} className="tag tag-success">{skill}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                        <div className="glass" style={{ padding: '2rem' }}>
+                            <h3>Job Matching</h3>
+                            <div style={{ marginTop: '1.5rem' }}>
+                                {results.job_matches.map(match => (
+                                    <div key={match.role} style={{ marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>{match.role}</span>
+                                            <span>{match.percentage}%</span>
+                                        </div>
+                                        <div className="match-progress-bg">
+                                            <div className="match-progress-fill" style={{ width: `${match.percentage}%` }}></div>
+                                        </div>
+                                        {match.missing_skills.length > 0 && (
+                                            <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                Missing: {match.missing_skills.join(', ')}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="glass" style={{ padding: '2rem' }}>
+                            <h3>Improvement Suggestions</h3>
+                            <ul style={{ marginTop: '1.5rem', listStyle: 'none' }}>
+                                {results.suggestions.map((s, i) => (
+                                    <li key={i} style={{ marginBottom: '1rem', display: 'flex', gap: '0.8rem' }}>
+                                        <Icon name="check-circle" size={18} className="tag-warning" />
+                                        <span>{s}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <button className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => window.print()}>
+                                <Icon name="download" size={18} /> Download Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [isAuthOpen, setIsAuthOpen] = useState(false);
+            const [results, setResults] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [history, setHistory] = useState([]);
+
+            useEffect(() => {
+                const savedUser = localStorage.getItem('user');
+                if (savedUser) setUser(JSON.parse(savedUser));
+                
+                if (localStorage.getItem('token')) {
+                    fetchHistory();
+                }
+            }, []);
+
+            const fetchHistory = async () => {
+                try {
+                    const token = localStorage.getItem('token');
+                    const res = await axios.get('http://localhost:8000/history', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    setHistory(res.data);
+                } catch (err) {}
+            };
+
+            const handleLogout = () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setUser(null);
+                setResults(null);
+            };
+
+            const handleAuthSuccess = (data) => {
+                setUser({ email: data.email, id: data.user_id });
+                setIsAuthOpen(false);
+                fetchHistory();
+            };
+
+            return (
+                <div>
+                    <div className="bg-blobs">
+                        <div className="blob blob-1"></div>
+                        <div className="blob blob-2"></div>
+                    </div>
+                    
+                    <Navbar 
+                        user={user} 
+                        onLogout={handleLogout} 
+                        onAuthClick={() => setIsAuthOpen(true)} 
+                    />
+
+                    <main>
+                        {loading ? (
+                            <div className="hero">
+                                <div className="score-circle glass" style={{ border: 'none' }}>
+                                    <Icon name="loader-2" size={48} className="fade-in" style={{ animation: 'spin 2s linear infinite' }} />
+                                </div>
+                                <h2>Analyzing your resume...</h2>
+                            </div>
+                        ) : results ? (
+                            <Dashboard results={results} history={history} onBack={() => setResults(null)} />
+                        ) : (
+                            <UploadSection 
+                                onUploadStart={() => {
+                                    if (!user) setIsAuthOpen(true);
+                                    else setLoading(true);
+                                }}
+                                onUploadSuccess={(data) => {
+                                    setResults(data);
+                                    setLoading(false);
+                                    fetchHistory();
+                                }}
+                                onUploadError={(err) => {
+                                    setLoading(false);
+                                    alert(err);
+                                }}
+                            />
+                        )}
+                    </main>
+
+                    <AuthModal 
+                        isOpen={isAuthOpen} 
+                        onClose={() => setIsAuthOpen(false)} 
+                        onAuthSuccess={handleAuthSuccess}
+                    />
+
+                    <style>{`
+                        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                    `}</style>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
